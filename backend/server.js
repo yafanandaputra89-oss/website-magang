@@ -22,7 +22,6 @@ const persetujuanKonversiRoutes = require("./routes/persetujuanKonversiRoutes");
 const verifikasiPerusahaanRoutes = require("./routes/verifikasiPerusahaanRoutes");
 const laporanMagangRoutes = require("./routes/laporanMagangRoutes");
 const adminLowonganRoutes = require("./routes/adminLowonganRoutes"); // ← tambahan
-const magangRoutes = require("./routes/MagangRoutes"); // ← tambahan
 
 
 

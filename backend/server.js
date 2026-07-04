@@ -57,7 +57,6 @@ app.use("/api/verifikasi-perusahaan", verifikasiPerusahaanRoutes);
 app.use("/api/laporan-magang", laporanMagangRoutes);
 app.use("/api/pengajuan-dosen", pengajuanDosenRoutes);
 app.use("/api/admin/lowongan", adminLowonganRoutes); // ← tambahan
-app.use("/api/perusahaan/mahasiswa-magang", magangRoutes); // ← tambahan
 
 
 // ── Start ─────────────────────────────────────────────────────────────────

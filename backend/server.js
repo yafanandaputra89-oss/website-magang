@@ -20,9 +20,10 @@ const lamaranRoutes = require("./routes/lamaranRoutes");
 const konversiSksRoutes = require("./routes/konversiSksRoutes");
 const persetujuanKonversiRoutes = require("./routes/persetujuanKonversiRoutes");
 const verifikasiPerusahaanRoutes = require("./routes/verifikasiPerusahaanRoutes");
-const pengajuanDosenRoutes = require("./routes/pengajuandosenroutes");
 const laporanMagangRoutes = require("./routes/laporanMagangRoutes");
+const pengajuanDosenRoutes = require("./routes/Pengajuandosenroutes"); // nama file asli: Pengajuandosenroutes.js
 const adminLowonganRoutes = require("./routes/adminLowonganRoutes"); // ← tambahan
+const magangRoutes = require("./routes/MagangRoutes"); // ← nama file asli: MagangRoutes.js
 
 
 
@@ -58,6 +59,7 @@ app.use("/api/verifikasi-perusahaan", verifikasiPerusahaanRoutes);
 app.use("/api/laporan-magang", laporanMagangRoutes);
 app.use("/api/pengajuan-dosen", pengajuanDosenRoutes);
 app.use("/api/admin/lowongan", adminLowonganRoutes); // ← tambahan
+app.use("/api/perusahaan/mahasiswa-magang", magangRoutes); // ← tambahan
 
 
 // ── Start ─────────────────────────────────────────────────────────────────
@@ -65,10 +67,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
-require("dotenv").config();
-
-console.log("JWT_SECRET status:", process.env.JWT_SECRET ? "✅ termuat" : "❌ KOSONG");
-if (!process.env.JWT_SECRET) {
-    console.error("FATAL: JWT_SECRET tidak ditemukan di .env — server dihentikan.");
-    process.exit(1);
-}

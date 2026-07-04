@@ -20,6 +20,7 @@ const lamaranRoutes = require("./routes/lamaranRoutes");
 const konversiSksRoutes = require("./routes/konversiSksRoutes");
 const persetujuanKonversiRoutes = require("./routes/persetujuanKonversiRoutes");
 const verifikasiPerusahaanRoutes = require("./routes/verifikasiPerusahaanRoutes");
+const pengajuanDosenRoutes = require("./routes/pengajuandosenroutes");
 const laporanMagangRoutes = require("./routes/laporanMagangRoutes");
 const adminLowonganRoutes = require("./routes/adminLowonganRoutes"); // ← tambahan
 

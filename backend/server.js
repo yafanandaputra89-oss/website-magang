@@ -23,7 +23,7 @@ const verifikasiPerusahaanRoutes = require("./routes/verifikasiPerusahaanRoutes"
 const laporanMagangRoutes = require("./routes/laporanMagangRoutes");
 const pengajuanDosenRoutes = require("./routes/Pengajuandosenroutes"); // nama file asli: Pengajuandosenroutes.js
 const adminLowonganRoutes = require("./routes/adminLowonganRoutes"); // ← tambahan
-const magangRoutes = require("./routes/MagangRoutes"); // ← nama file asli: MagangRoutes.js
+const magangRoutes = require("./routes/Magangroutes"); // nama file asli di GitHub: Magangroutes.js
 
 
 

@@ -21,9 +21,9 @@ const konversiSksRoutes = require("./routes/konversiSksRoutes");
 const persetujuanKonversiRoutes = require("./routes/persetujuanKonversiRoutes");
 const verifikasiPerusahaanRoutes = require("./routes/verifikasiPerusahaanRoutes");
 const laporanMagangRoutes = require("./routes/laporanMagangRoutes");
-const pengajuanDosenRoutes = require("./routes/pengajuanDosenRoutes"); // pastikan file bernama pengajuanDosenRoutes.js
+const pengajuanDosenRoutes = require("./routes/Pengajuandosenroutes"); // ← disesuaikan dengan nama file asli
 const adminLowonganRoutes = require("./routes/adminLowonganRoutes");
-const magangRoutes = require("./routes/magangRoutes"); // pastikan file bernama magangRoutes.js
+const magangRoutes = require("./routes/MagangRoutes"); // ← disesuaikan dengan nama file asli
 const persetujuanKonversiAdminRoutes = require("./routes/Persetujuankonversiadminroutes");
 const rekrutmenRoutes = require("./routes/rekrutmenRoutes");
 const notifikasiRoutes = require("./routes/notifikasiRoutes");
@@ -31,8 +31,8 @@ const notifikasiRoutes = require("./routes/notifikasiRoutes");
 const app = express();
 
 const allowedOrigins = [
-    "http://localhost:3000", // untuk development lokal
-    "https://sistem-informasi-pemagangan-mahasis-eta.vercel.app", // frontend production di Vercel
+    "http://localhost:3000",
+    "https://sistem-informasi-pemagangan-mahasis-eta.vercel.app",
 ];
 
 app.use(cors({

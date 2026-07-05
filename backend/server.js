@@ -30,7 +30,9 @@ const magangRoutes = require("./routes/Magangroutes"); // nama file asli di GitH
 const app = express();
 
 app.use(cors({
-    origin: "http://localhost:3000",
+    origin: ["http://localhost:3000",
+        "https://sistem-informasi-pemagangan-mahasis-eta.vercel.app"
+    ],
     credentials: true,
 }));
 

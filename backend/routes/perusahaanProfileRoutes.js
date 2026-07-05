@@ -18,4 +18,9 @@ router.put(
     perusahaanProfileController.createOrUpdateProfilePerusahaan
 );
 
+router.get(
+    "/public",
+    perusahaanProfileController.getAllPerusahaan
+);
+
 module.exports = router;

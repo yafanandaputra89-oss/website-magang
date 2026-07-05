@@ -112,15 +112,38 @@ exports.getMahasiswaMagangDetail = async (req, res) => {
 
 /* ════════════════════════════════════════════════════════════════
    PATCH /api/perusahaan/mahasiswa-magang/:id/status
-   Body: { status: "Aktif" | "Selesai" | "Cuti" | "Dropout", tanggalSelesai?, catatan? }
+   Body: { status: "Aktif" | "Selesai" | "Cuti" | "Dropout",
+           tanggalMulai?, tanggalSelesai?, catatan? }
+
+   Digabung dengan input periode magang: perusahaan mengubah status
+   SEKALIGUS tanggal mulai/selesai dalam satu request (satu form di FE).
+   - tanggalMulai opsional: kalau tidak dikirim, nilai lama dipertahankan.
+   - tanggalSelesai wajib (baru ATAU sudah ada sebelumnya) kalau status
+     yang dipilih adalah "Selesai".
 ════════════════════════════════════════════════════════════════ */
 exports.updateStatusMagang = async (req, res) => {
   try {
-    const { status, tanggalSelesai, catatan } = req.body;
+    const { status, tanggalMulai, tanggalSelesai, catatan } = req.body;
     const allowed = ["Aktif", "Selesai", "Cuti", "Dropout"];
 
     if (!allowed.includes(status)) {
       return res.status(400).json({ message: "Status magang tidak valid" });
+    }
+
+    let mulaiDate = null;
+    if (tanggalMulai) {
+      mulaiDate = new Date(tanggalMulai);
+      if (isNaN(mulaiDate.getTime())) {
+        return res.status(400).json({ message: "Format tanggal mulai tidak valid" });
+      }
+    }
+
+    let selesaiDate = null;
+    if (tanggalSelesai) {
+      selesaiDate = new Date(tanggalSelesai);
+      if (isNaN(selesaiDate.getTime())) {
+        return res.status(400).json({ message: "Format tanggal selesai tidak valid" });
+      }
     }
 
     const perusahaan = await getPerusahaan(req.user.id);
@@ -133,11 +156,28 @@ exports.updateStatusMagang = async (req, res) => {
       return res.status(404).json({ message: "Data magang tidak ditemukan" });
     }
 
+    // Tanggal mulai wajib ada (baru atau sudah ada sebelumnya)
+    const finalMulai = mulaiDate || lamaran.magang.tanggalMulai;
+    if (!finalMulai) {
+      return res.status(400).json({ message: "Tanggal mulai wajib diisi" });
+    }
+
+    // Tanggal selesai wajib diisi (baru atau sudah ada sebelumnya) kalau status "Selesai"
+    const finalSelesai = selesaiDate || lamaran.magang.tanggalSelesai;
+    if (status === "Selesai" && !finalSelesai) {
+      return res.status(400).json({ message: "Tanggal selesai wajib diisi untuk status Selesai" });
+    }
+
+    if (finalMulai && finalSelesai && finalSelesai < finalMulai) {
+      return res.status(400).json({ message: "Tanggal selesai tidak boleh sebelum tanggal mulai" });
+    }
+
     const updated = await prisma.magang.update({
       where: { id: lamaran.magang.id },
       data: {
         status,
-        tanggalSelesai: tanggalSelesai ? new Date(tanggalSelesai) : lamaran.magang.tanggalSelesai,
+        tanggalMulai: finalMulai,
+        tanggalSelesai: finalSelesai,
         catatan: catatan ?? lamaran.magang.catatan,
       },
     });
@@ -214,5 +254,63 @@ exports.createPenilaian = async (req, res) => {
     res.status(201).json({ message: "Penilaian berhasil disimpan", data: penilaian });
   } catch (error) {
     res.status(500).json({ message: "Gagal menyimpan penilaian", error: error.message });
+  }
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ══════════════════════ BARU — SISI MAHASISWA ══════════════════════════════
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════════════════
+   GET /api/mahasiswa/magang/info-aktif
+   Dipakai dashboard mahasiswa untuk kartu "Magang Mulai" & "Magang Selesai"
+   (menggantikan placeholder "Hari Hadir" & "Sisa Hari Magang").
+
+   404 kalau mahasiswa belum KONFIRMASI_DITERIMA di lamaran manapun —
+   BUKAN error fatal, frontend sudah handle ini via try/catch terpisah
+   (lihat dashboard/page.js: infoAktif di-set null kalau gagal).
+════════════════════════════════════════════════════════════════ */
+exports.getInfoAktifMahasiswa = async (req, res) => {
+  try {
+    const mahasiswa = await prisma.mahasiswa.findUnique({
+      where: { userId: Number(req.user.id) },
+    });
+    if (!mahasiswa) {
+      return res.status(404).json({ message: "Profil mahasiswa belum dibuat" });
+    }
+
+    const lamaranAktif = await prisma.lamaran.findFirst({
+      where: {
+        mahasiswaId: mahasiswa.id,
+        status: "KONFIRMASI_DITERIMA",
+      },
+      include: {
+        lowongan: { include: { perusahaan: true } },
+        magang: true, // ── field yang dibutuhkan: tanggalMulai, tanggalSelesai, status
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!lamaranAktif) {
+      return res.status(404).json({ message: "Belum ada magang aktif" });
+    }
+
+    return res.json({
+      message: "Info aktif berhasil diambil",
+      data: {
+        lamaranId: lamaranAktif.id,
+        perusahaan: lamaranAktif.lowongan?.perusahaan?.nama || "-",
+        posisi: lamaranAktif.lowongan?.posisi || "-",
+        // ── dipakai untuk kartu "Magang Mulai" & "Magang Selesai" di FE ─────
+        tanggalMulai: lamaranAktif.magang?.tanggalMulai || lamaranAktif.startDate,
+        tanggalSelesai: lamaranAktif.magang?.tanggalSelesai || null,
+        statusMagang: lamaranAktif.magang?.status || "Aktif",
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Gagal mengambil info aktif",
+      error: error.message,
+    });
   }
 };

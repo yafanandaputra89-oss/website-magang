@@ -21,18 +21,28 @@ const konversiSksRoutes = require("./routes/konversiSksRoutes");
 const persetujuanKonversiRoutes = require("./routes/persetujuanKonversiRoutes");
 const verifikasiPerusahaanRoutes = require("./routes/verifikasiPerusahaanRoutes");
 const laporanMagangRoutes = require("./routes/laporanMagangRoutes");
-const pengajuanDosenRoutes = require("./routes/Pengajuandosenroutes"); // nama file asli: Pengajuandosenroutes.js
-const adminLowonganRoutes = require("./routes/adminLowonganRoutes"); // ← tambahan
-const magangRoutes = require("./routes/Magangroutes"); // nama file asli di GitHub: Magangroutes.js
-
-
+const pengajuanDosenRoutes = require("./routes/pengajuanDosenRoutes"); // pastikan file bernama pengajuanDosenRoutes.js
+const adminLowonganRoutes = require("./routes/adminLowonganRoutes");
+const magangRoutes = require("./routes/magangRoutes"); // pastikan file bernama magangRoutes.js
+const persetujuanKonversiAdminRoutes = require("./routes/Persetujuankonversiadminroutes");
+const rekrutmenRoutes = require("./routes/rekrutmenRoutes");
+const notifikasiRoutes = require("./routes/notifikasiRoutes");
 
 const app = express();
 
+const allowedOrigins = [
+    "http://localhost:3000", // untuk development lokal
+    "https://sistem-informasi-pemagangan-mahasis-eta.vercel.app", // frontend production di Vercel
+];
+
 app.use(cors({
-    origin: ["http://localhost:3000",
-        "https://sistem-informasi-pemagangan-mahasis-eta.vercel.app"
-    ],
+    origin: function(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error("Origin tidak diizinkan oleh CORS: " + origin));
+        }
+    },
     credentials: true,
 }));
 
@@ -53,16 +63,16 @@ app.use("/api/dosen", dosenRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/lamaran", lamaranRoutes);
-app.use("/api/rekrutmen", require("./routes/rekrutmenRoutes"));
-app.use("/api/notifikasi", require("./routes/notifikasiRoutes"));
+app.use("/api/rekrutmen", rekrutmenRoutes);
+app.use("/api/notifikasi", notifikasiRoutes);
 app.use("/api/konversi-sks", konversiSksRoutes);
 app.use("/api/dosen/persetujuan-konversi", persetujuanKonversiRoutes);
 app.use("/api/verifikasi-perusahaan", verifikasiPerusahaanRoutes);
 app.use("/api/laporan-magang", laporanMagangRoutes);
 app.use("/api/pengajuan-dosen", pengajuanDosenRoutes);
-app.use("/api/admin/lowongan", adminLowonganRoutes); // ← tambahan
-app.use("/api/perusahaan/mahasiswa-magang", magangRoutes); // ← tambahan
-
+app.use("/api/admin/lowongan", adminLowonganRoutes);
+app.use("/api/perusahaan/mahasiswa-magang", magangRoutes);
+app.use("/api/admin/persetujuan-konversi", persetujuanKonversiAdminRoutes);
 
 // ── Start ─────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;

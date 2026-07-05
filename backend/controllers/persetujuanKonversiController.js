@@ -1,6 +1,22 @@
 const prisma = require("../config/prisma");
 const createAuditLog = require("../utils/auditLog");
 
+/**
+ * ALUR STATUS (field `status` di tabel konversiSks, tetap String, tidak perlu ubah tipe):
+ *   menunggu          -> mahasiswa mengajukan, menunggu review dosen
+ *   disetujui_dosen   -> dosen sudah setuju, diteruskan ke admin prodi utk validasi final
+ *   ditolak           -> ditolak (baik oleh dosen maupun admin prodi)
+ *   disetujui         -> disetujui final oleh admin prodi
+ *
+ * Catatan: tab filter di frontend dosen tetap "menunggu" / "disetujui" / "ditolak" / "semua".
+ * Mapping dari label frontend -> nilai status asli di DB dilakukan di FILTER_MAP di bawah.
+ */
+const FILTER_MAP = {
+  menunggu: ["menunggu"],
+  disetujui: ["disetujui_dosen", "disetujui"], // dosen tetap lihat yg sudah dia setujui walau status akhirnya berubah di admin
+  ditolak: ["ditolak"],
+};
+
 exports.getPengajuanKonversiDosen = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -17,13 +33,16 @@ exports.getPengajuanKonversiDosen = async (req, res) => {
       });
     }
 
+    const statusFilter =
+      status !== "semua" && FILTER_MAP[status] ? { status: { in: FILTER_MAP[status] } } : {};
+
     const konversi = await prisma.konversiSks.findMany({
       where: {
         lamaran: {
           dosenPembimbingId: dosen.id,
           status: "KONFIRMASI_DITERIMA",
         },
-        ...(status !== "semua" ? { status } : {}),
+        ...statusFilter,
         ...(search
           ? {
               OR: [
@@ -114,7 +133,7 @@ exports.getPengajuanKonversiDosen = async (req, res) => {
           nama: item.nama,
           sks: item.sks,
           kategori: item.kategori,
-          status: item.status,
+          status: item.status, // menunggu | disetujui_dosen | disetujui | ditolak
           keterangan: item.keterangan,
           cpmk: item.cpmk ? JSON.parse(item.cpmk) : [],
           objektif: item.objektif || "",
@@ -130,7 +149,9 @@ exports.getPengajuanKonversiDosen = async (req, res) => {
       totalMahasiswa: grouped.length,
       totalMK: allMK.length,
       menungguMK: allMK.filter((item) => item.status === "menunggu").length,
-      disetujuiMK: allMK.filter((item) => item.status === "disetujui").length,
+      disetujuiMK: allMK.filter((item) =>
+        ["disetujui_dosen", "disetujui"].includes(item.status)
+      ).length,
       ditolakMK: allMK.filter((item) => item.status === "ditolak").length,
     };
 
@@ -151,7 +172,7 @@ exports.updateStatusKonversiDosen = async (req, res) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
-    const { status, keterangan } = req.body;
+    const { status, keterangan } = req.body; // status dari frontend tetap "disetujui" | "ditolak"
 
     const allowedStatus = ["disetujui", "ditolak"];
 
@@ -206,14 +227,17 @@ exports.updateStatusKonversiDosen = async (req, res) => {
       });
     }
 
+    // Dosen hanya bisa: teruskan ke admin prodi (disetujui_dosen), atau tolak langsung.
+    const dbStatus = status === "disetujui" ? "disetujui_dosen" : "ditolak";
+
     const updated = await prisma.konversiSks.update({
       where: { id: Number(id) },
       data: {
-        status,
+        status: dbStatus,
         keterangan:
           keterangan ||
           (status === "disetujui"
-            ? "Disetujui oleh dosen pembimbing."
+            ? "Direkomendasikan oleh dosen pembimbing, menunggu validasi admin prodi."
             : "Ditolak oleh dosen pembimbing."),
       },
     });
@@ -223,9 +247,12 @@ exports.updateStatusKonversiDosen = async (req, res) => {
         userId: pengajuan.mahasiswa.userId,
         judul:
           status === "disetujui"
-            ? "Konversi SKS Disetujui"
+            ? "Konversi SKS Direkomendasikan Dosen"
             : "Konversi SKS Ditolak",
-        pesan: `Pengajuan konversi mata kuliah ${pengajuan.nama} telah ${status}.`,
+        pesan:
+          status === "disetujui"
+            ? `Pengajuan konversi mata kuliah ${pengajuan.nama} direkomendasikan dosen, menunggu validasi admin prodi.`
+            : `Pengajuan konversi mata kuliah ${pengajuan.nama} telah ditolak.`,
       },
     });
 
@@ -241,7 +268,7 @@ exports.updateStatusKonversiDosen = async (req, res) => {
     return res.json({
       message:
         status === "disetujui"
-          ? "Pengajuan berhasil disetujui"
+          ? "Pengajuan berhasil diteruskan ke admin prodi"
           : "Pengajuan berhasil ditolak",
       data: updated,
     });

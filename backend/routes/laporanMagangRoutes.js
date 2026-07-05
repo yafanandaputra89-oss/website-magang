@@ -9,7 +9,9 @@ const {
     reviewLaporanDosen,
 } = require("../controllers/laporanMagangController");
 
-const uploadLaporan = require("../middleware/uploadLaporan");
+// PENTING: uploadLaporan.js sekarang mengekspor sebuah objek
+// { uploadLaporan, uploadLaporanBufferToCloudinary }, jadi harus di-destructure.
+const { uploadLaporan } = require("../middleware/uploadLaporan");
 const { verifyToken, checkRole } = require("../middleware/authMiddleware");
 
 /* ── Mahasiswa ────────────────────────────────────────────────── */

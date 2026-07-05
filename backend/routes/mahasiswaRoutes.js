@@ -18,4 +18,12 @@ router.put(
     mahasiswaController.createOrUpdateProfileMahasiswa
 );
 
+
+router.get(
+    "/admin/mahasiswa/count",
+    verifyToken,
+    checkRole("admin"),
+    mahasiswaController.getTotalMahasiswa
+);
+
 module.exports = router;

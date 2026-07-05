@@ -196,4 +196,59 @@ exports.createOrUpdateProfilePerusahaan = async (req, res) => {
   }
 };
 
+/**
+ * GET - Ambil semua perusahaan (untuk halaman publik pencarian perusahaan)
+ * Tidak butuh login — bisa diakses siapa saja
+ */
+exports.getAllPerusahaan = async (req, res) => {
+  try {
+    const daftarPerusahaan = await prisma.perusahaan.findMany({
+      select: {
+        id: true,
+        nama: true,
+        logo: true,
+        bidang: true,
+        alamat: true,
+        updatedAt: true,
+        // ── Hitung jumlah lowongan milik perusahaan ini
+        _count: {
+          select: { lowongans: true },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
 
+    // ── Helper: ubah updatedAt jadi teks relatif ("2 jam lalu", dst)
+    const formatRelativeTime = (date) => {
+      const diffMs = Date.now() - new Date(date).getTime();
+      const menit = Math.floor(diffMs / 60000);
+      if (menit < 1) return "baru saja";
+      if (menit < 60) return `${menit} menit lalu`;
+      const jam = Math.floor(menit / 60);
+      if (jam < 24) return `${jam} jam lalu`;
+      const hari = Math.floor(jam / 24);
+      return `${hari} hari lalu`;
+    };
+
+    const hasil = daftarPerusahaan.map((p) => ({
+      id: p.id,
+      name: p.nama,
+      location: p.alamat,
+      industry: p.bidang,
+      jobs: p._count.lowongans,
+      lastActive: formatRelativeTime(p.updatedAt),
+      logo: p.logo, // bisa berupa URL gambar atau null
+    }));
+
+    res.json({
+      message: "Daftar perusahaan berhasil diambil",
+      data: hasil,
+    });
+  } catch (error) {
+    console.error("Error getAllPerusahaan:", error);
+    res.status(500).json({
+      message: "Gagal mengambil daftar perusahaan",
+      error: error.message,
+    });
+  }
+};

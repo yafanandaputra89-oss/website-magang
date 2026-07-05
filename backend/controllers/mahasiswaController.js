@@ -238,3 +238,19 @@ exports.setDosenPembimbing = async (req, res) => {
     });
   }
 };
+
+exports.getTotalMahasiswa = async (req, res) => {
+  try {
+    const total = await prisma.mahasiswa.count();
+    res.json({
+      message: "Total mahasiswa berhasil diambil",
+      total,
+    });
+  } catch (error) {
+    console.error("❌ getTotalMahasiswa error:", error);
+    res.status(500).json({
+      message: "Gagal mengambil total mahasiswa",
+      error: error.message,
+    });
+  }
+};

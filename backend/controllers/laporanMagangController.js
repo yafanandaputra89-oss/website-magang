@@ -1,11 +1,12 @@
 const prisma = require("../config/prisma");
 const cloudinary = require("../config/cloudinary");
+const { uploadLaporanBufferToCloudinary } = require("../middleware/uploadLaporan");
 
 /* ═══════════════════════════════════════════════════════════════
    MAHASISWA — Upload laporan magang
    POST /api/laporan-magang/upload
    Body (multipart): { lamaranId, tanggal, judul, catatan }
-   File: "file" (PDF/Word/Excel/Image)
+   File: "file" (PDF/Word/Excel/Image) — disimpan ke Cloudinary
 ═══════════════════════════════════════════════════════════════ */
 exports.uploadLaporanMagang = async (req, res) => {
   try {
@@ -63,6 +64,22 @@ exports.uploadLaporanMagang = async (req, res) => {
       });
     }
 
+    // ── Upload file laporan ke Cloudinary (SEBELUM simpan ke database) ────────
+    let fileUrl = null;
+    try {
+      const uploadResult = await uploadLaporanBufferToCloudinary(
+        req.file.buffer,
+        req.file.mimetype
+      );
+      fileUrl = uploadResult.secure_url;
+    } catch (uploadError) {
+      console.error("CLOUDINARY UPLOAD ERROR:", uploadError.message);
+      return res.status(500).json({
+        message: "Gagal mengunggah file laporan ke Cloudinary",
+        error: uploadError.message,
+      });
+    }
+
     // Buat laporan — dosenId otomatis dari dosenPembimbingId lamaran
     const laporan = await prisma.laporanMagang.create({
       data: {
@@ -72,7 +89,7 @@ exports.uploadLaporanMagang = async (req, res) => {
         tanggal: new Date(tanggal),
         judul,
         catatan: catatan || null,
-        fileUrl: `/uploads/laporan/${req.file.filename}`,
+        fileUrl,
         status: "MENUNGGU_REVIEW",
       },
       include: {

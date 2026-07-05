@@ -438,6 +438,9 @@ exports.updateStatusLamaran = async (req, res) => {
    • konfirmasi = true  → status KONFIRMASI_DITERIMA
      - Lamaran lain milik mahasiswa yang berstatus DITERIMA_MAGANG
        otomatis menjadi DITOLAK (dengan catatan sistem)
+     - BARU: otomatis membuat record Magang (periode magang berjalan),
+       supaya lamaran ini langsung muncul di halaman
+       "Daftar Mahasiswa Magang" milik perusahaan.
    • konfirmasi = false → status DITOLAK, alasanBatal wajib ada
 ════════════════════════════════════════════════════════════════ */
 exports.konfirmasiPenerimaanMagang = async (req, res) => {
@@ -515,6 +518,26 @@ exports.konfirmasiPenerimaanMagang = async (req, res) => {
         where: { id: Number(id) },
         data:  { status: "KONFIRMASI_DITERIMA" },
       });
+
+      // ── BARU — buat record Magang (periode magang berjalan) ────────────────
+      // upsert agar idempotent: kalau endpoint ini pernah kepanggil dobel
+      // (misal user klik konfirmasi dua kali / race condition), tidak error
+      // karena lamaranId bersifat @unique pada model Magang.
+      try {
+        await prisma.magang.upsert({
+          where:  { lamaranId: Number(id) },
+          update: {}, // kalau record sudah ada, jangan di-overwrite
+          create: {
+            lamaranId:    Number(id),
+            tanggalMulai: lamaran.startDate, // startDate yang diisi mahasiswa saat melamar
+            status:       "Aktif",
+          },
+        });
+      } catch (magangError) {
+        // Jangan gagalkan seluruh proses konfirmasi hanya karena ini,
+        // tapi catat di log supaya bisa di-backfill manual kalau perlu.
+        console.error("GAGAL MEMBUAT RECORD MAGANG:", magangError.message);
+      }
 
       // Otomatis tolak lamaran lain yang juga berstatus DITERIMA_MAGANG
       const lamaranLainDiterima = await prisma.lamaran.findMany({

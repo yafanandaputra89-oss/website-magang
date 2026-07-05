@@ -4,7 +4,7 @@ const router = express.Router();
 const {
     getPengajuanKonversiAdmin,
     updateStatusKonversiAdmin,
-} = require("../controllers/persetujuanKonversiAdminController");
+} = require("../controllers/Persetujuankonversiadmincontroller");
 
 const { verifyToken, checkRole } = require("../middleware/authMiddleware");
 

@@ -1,7 +1,7 @@
 // routes/pengajuanDosenRoutes.js
 const express = require("express");
 const router = express.Router();
-const pengajuanDosenController = require("../controllers/pengajuanDosenController");
+const pengajuanDosenController = require("../controllers/pengajuandosencontroller");
 const { verifyToken, checkRole } = require("../middleware/authMiddleware");
 
 // MAHASISWA

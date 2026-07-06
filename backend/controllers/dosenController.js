@@ -50,8 +50,14 @@ exports.createOrUpdateProfileDosen = async (req, res) => {
     const nip = profile.nip && profile.nip.trim() !== "" ? profile.nip.trim() : null;
     const nidn = profile.nidn && profile.nidn.trim() !== "" ? profile.nidn.trim() : null;
 
+    // ── Ambil data dosen yang sudah ada (kalau ada), dipakai untuk
+    //    mengecualikan record milik dosen ini sendiri saat cek duplikat.
+    const existingDosen = await prisma.dosen.findUnique({ where: { userId } });
+
     // ── Cek duplikat NIP sebelum upsert (mencegah 500 generic) ──────
-    if (nip) {
+    // NIP/NIDN boleh diubah kapan pun oleh dosen; yang tidak boleh
+    // hanya memakai nomor yang sudah dipakai dosen lain.
+    if (nip && nip !== existingDosen?.nip) {
       const dupNip = await prisma.dosen.findFirst({
         where: { nip, NOT: { userId } },
       });
@@ -63,7 +69,7 @@ exports.createOrUpdateProfileDosen = async (req, res) => {
     }
 
     // ── Cek duplikat NIDN sebelum upsert ─────────────────────────────
-    if (nidn) {
+    if (nidn && nidn !== existingDosen?.nidn) {
       const dupNidn = await prisma.dosen.findFirst({
         where: { nidn, NOT: { userId } },
       });

@@ -17,13 +17,16 @@ async function getLamaranMilikPerusahaan(lamaranId, perusahaanId) {
       lowongan: true,
       mahasiswa: { include: { user: { select: { name: true, email: true } } } },
       magang: { include: { penilaians: { orderBy: { createdAt: "desc" } } } },
-      laporanMagang: { orderBy: { tanggal: "desc" } },
+      // laporanMagang TIDAK di-include lagi — logbook tidak dipakai di endpoint ini
     },
   });
   return lamaran;
 }
 
 /* ── Helper: mapping 1 baris lamaran+magang jadi bentuk yang dipakai FE ───── */
+/*    NOTE: field "logbook" sudah dihapus dari sini. Data laporanMagang di    */
+/*    database TIDAK dihapus/diubah — cuma tidak lagi diquery/ditampilkan     */
+/*    lewat endpoint mahasiswa-magang ini.                                   */
 function mapPeserta(lamaran) {
   return {
     id: lamaran.id, // pakai id lamaran sebagai id utama di FE
@@ -38,12 +41,7 @@ function mapPeserta(lamaran) {
     mulai: lamaran.magang?.tanggalMulai || lamaran.startDate,
     selesai: lamaran.magang?.tanggalSelesai || null,
     status: lamaran.magang?.status || "Aktif",
-    logbook: (lamaran.laporanMagang || []).map((l) => ({
-      id: l.id,
-      tanggal: l.tanggal,
-      judul: l.judul,
-      status: l.status === "DISETUJUI" ? "Disetujui" : "Menunggu Review",
-    })),
+    catatan: lamaran.magang?.catatan || null,
     penilaian: (lamaran.magang?.penilaians || []).map((p) => ({
       id: p.id,
       periode: p.periode,
@@ -75,7 +73,7 @@ exports.getMahasiswaMagang = async (req, res) => {
         lowongan: true,
         mahasiswa: { include: { user: { select: { name: true, email: true } } } },
         magang: { include: { penilaians: { orderBy: { createdAt: "desc" } } } },
-        laporanMagang: { orderBy: { tanggal: "desc" } },
+        // laporanMagang TIDAK di-include lagi
       },
       orderBy: { createdAt: "desc" },
     });
@@ -90,7 +88,7 @@ exports.getMahasiswaMagang = async (req, res) => {
 
 /* ════════════════════════════════════════════════════════════════
    GET /api/perusahaan/mahasiswa-magang/:id
-   Detail satu peserta (id = lamaranId), termasuk logbook & penilaian lengkap.
+   Detail satu peserta (id = lamaranId).
 ════════════════════════════════════════════════════════════════ */
 exports.getMahasiswaMagangDetail = async (req, res) => {
   try {
@@ -115,8 +113,8 @@ exports.getMahasiswaMagangDetail = async (req, res) => {
    Body: { status: "Aktif" | "Selesai" | "Cuti" | "Dropout",
            tanggalMulai?, tanggalSelesai?, catatan? }
 
-   Digabung dengan input periode magang: perusahaan mengubah status
-   SEKALIGUS tanggal mulai/selesai dalam satu request (satu form di FE).
+   Perusahaan mengubah status magang (misal Aktif -> Selesai / Cuti)
+   sekaligus opsional update tanggal mulai/selesai & catatan.
    - tanggalMulai opsional: kalau tidak dikirim, nilai lama dipertahankan.
    - tanggalSelesai wajib (baru ATAU sudah ada sebelumnya) kalau status
      yang dipilih adalah "Selesai".
@@ -258,17 +256,15 @@ exports.createPenilaian = async (req, res) => {
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
-   ══════════════════════ BARU — SISI MAHASISWA ══════════════════════════════
+   ══════════════════════ SISI MAHASISWA ═════════════════════════════════════
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ════════════════════════════════════════════════════════════════
    GET /api/mahasiswa/magang/info-aktif
-   Dipakai dashboard mahasiswa untuk kartu "Magang Mulai" & "Magang Selesai"
-   (menggantikan placeholder "Hari Hadir" & "Sisa Hari Magang").
+   Dipakai dashboard mahasiswa untuk kartu "Magang Mulai" & "Magang Selesai".
 
    404 kalau mahasiswa belum KONFIRMASI_DITERIMA di lamaran manapun —
-   BUKAN error fatal, frontend sudah handle ini via try/catch terpisah
-   (lihat dashboard/page.js: infoAktif di-set null kalau gagal).
+   BUKAN error fatal, frontend sudah handle ini via try/catch terpisah.
 ════════════════════════════════════════════════════════════════ */
 exports.getInfoAktifMahasiswa = async (req, res) => {
   try {
@@ -301,7 +297,6 @@ exports.getInfoAktifMahasiswa = async (req, res) => {
         lamaranId: lamaranAktif.id,
         perusahaan: lamaranAktif.lowongan?.perusahaan?.nama || "-",
         posisi: lamaranAktif.lowongan?.posisi || "-",
-        // ── dipakai untuk kartu "Magang Mulai" & "Magang Selesai" di FE ─────
         tanggalMulai: lamaranAktif.magang?.tanggalMulai || lamaranAktif.startDate,
         tanggalSelesai: lamaranAktif.magang?.tanggalSelesai || null,
         statusMagang: lamaranAktif.magang?.status || "Aktif",

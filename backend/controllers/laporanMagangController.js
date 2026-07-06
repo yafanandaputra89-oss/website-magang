@@ -232,8 +232,9 @@ exports.getLaporanMahasiswa = async (req, res) => {
       tanggal: l.tanggal,
       catatan: l.catatan,
       fileUrl: l.fileUrl,
-      status: l.status,        // MENUNGGU_REVIEW | SUDAH_DINILAI
-      nilai: l.nilai,
+      // Kompatibel dengan data lama: laporan lama yang masih berstatus
+      // "SUDAH_DINILAI" diperlakukan sebagai "DISETUJUI" di sisi tampilan.
+      status: l.status === "SUDAH_DINILAI" ? "DISETUJUI" : l.status,
       feedback: l.feedback,
       dikirim: l.createdAt,
       dosen: {
@@ -289,6 +290,14 @@ exports.getLaporanDosen = async (req, res) => {
       orderBy: { createdAt: "desc" },
     });
 
+    // Helper: mapping status mentah dari DB -> label yang dipakai frontend
+    // (menjaga kompatibilitas data lama yang masih "SUDAH_DINILAI")
+    const mapStatus = (raw) => {
+      if (raw === "DISETUJUI" || raw === "SUDAH_DINILAI") return "Disetujui";
+      if (raw === "DITOLAK") return "Ditolak";
+      return "Menunggu Review";
+    };
+
     // Kelompokkan per mahasiswa
     const grouped = laporan.reduce((acc, item) => {
       const mhsId = item.mahasiswaId;
@@ -311,9 +320,7 @@ exports.getLaporanDosen = async (req, res) => {
         tanggal: item.tanggal,
         judul: item.judul,
         catatan: item.feedback || "",
-        // "MENUNGGU_REVIEW" → "Belum Dinilai", "SUDAH_DINILAI" → "Sudah Dinilai"
-        status: item.status === "SUDAH_DINILAI" ? "Sudah Dinilai" : "Belum Dinilai",
-        nilai: item.nilai ?? null,
+        status: mapStatus(item.status),
         file: item.fileUrl
           ? {
               name: item.fileUrl.split("/").pop(),
@@ -334,8 +341,8 @@ exports.getLaporanDosen = async (req, res) => {
       const withMinggu = sorted.map((l, idx) => ({ ...l, minggu: idx + 1 }));
 
       const totalLaporan = withMinggu.length;
-      const sudahDinilai = withMinggu.filter(
-        (l) => l.status === "Sudah Dinilai"
+      const sudahDireview = withMinggu.filter(
+        (l) => l.status === "Disetujui" || l.status === "Ditolak"
       ).length;
 
       return {
@@ -343,7 +350,7 @@ exports.getLaporanDosen = async (req, res) => {
         laporan: withMinggu,
         totalLaporan,
         progres: totalLaporan
-          ? Math.round((sudahDinilai / totalLaporan) * 100)
+          ? Math.round((sudahDireview / totalLaporan) * 100)
           : 0,
       };
     });
@@ -362,24 +369,28 @@ exports.getLaporanDosen = async (req, res) => {
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   DOSEN — Beri nilai pada laporan
+   DOSEN — Setujui / Tolak laporan
    PATCH /api/laporan-magang/dosen/:laporanId/review
-   Body: { nilai (0–100), catatan? }
+   Body: { status: "DISETUJUI" | "DITOLAK", catatan? }
 ═══════════════════════════════════════════════════════════════ */
 exports.reviewLaporanDosen = async (req, res) => {
   try {
     const userId = req.user.id;
     const { laporanId } = req.params;
-    const { nilai, catatan } = req.body;
+    const { status, catatan } = req.body;
 
-    if (nilai === undefined || nilai === null) {
-      return res.status(400).json({ message: "Nilai wajib diisi" });
+    const ALLOWED_STATUS = ["DISETUJUI", "DITOLAK"];
+    if (!status || !ALLOWED_STATUS.includes(status)) {
+      return res.status(400).json({
+        message: "Status wajib diisi dan harus salah satu dari: DISETUJUI, DITOLAK",
+      });
     }
-    const nilaiNum = Number(nilai);
-    if (isNaN(nilaiNum) || nilaiNum < 0 || nilaiNum > 100) {
-      return res
-        .status(400)
-        .json({ message: "Nilai harus berupa angka antara 0 sampai 100" });
+
+    // Catatan wajib diisi kalau menolak, supaya mahasiswa tahu alasannya
+    if (status === "DITOLAK" && !catatan?.trim()) {
+      return res.status(400).json({
+        message: "Catatan wajib diisi saat menolak laporan",
+      });
     }
 
     const dosen = await prisma.dosen.findUnique({
@@ -408,22 +419,30 @@ exports.reviewLaporanDosen = async (req, res) => {
     const updated = await prisma.laporanMagang.update({
       where: { id: Number(laporanId) },
       data: {
-        nilai: nilaiNum,
         feedback: catatan || null,
-        status: "SUDAH_DINILAI",
+        status,
+        // Kolom `nilai` sengaja tidak disentuh — tetap ada di database
+        // (sudah production), tapi tidak dipakai lagi di alur ini.
       },
     });
 
     // Notifikasi ke mahasiswa (non-blocking)
     try {
+      const judulNotif =
+        status === "DISETUJUI" ? "Laporan Anda Disetujui" : "Laporan Anda Ditolak";
+      const pesanNotif =
+        status === "DISETUJUI"
+          ? `Laporan "${laporan.judul}" telah disetujui oleh dosen pembimbing.${
+              catatan ? ` Catatan: ${catatan}` : ""
+            }`
+          : `Laporan "${laporan.judul}" ditolak oleh dosen pembimbing. Catatan: ${catatan}`;
+
       await prisma.notifikasi.create({
         data: {
           userId: laporan.mahasiswa.userId,
           lamaranId: laporan.lamaranId,
-          judul: "Laporan Anda Telah Dinilai",
-          pesan: `Laporan "${laporan.judul}" mendapat nilai ${nilaiNum}.${
-            catatan ? ` Catatan dosen: ${catatan}` : ""
-          }`,
+          judul: judulNotif,
+          pesan: pesanNotif,
           dibaca: false,
         },
       });
@@ -432,13 +451,16 @@ exports.reviewLaporanDosen = async (req, res) => {
     }
 
     return res.json({
-      message: "Penilaian laporan berhasil disimpan",
+      message:
+        status === "DISETUJUI"
+          ? "Laporan berhasil disetujui"
+          : "Laporan berhasil ditolak",
       data: updated,
     });
   } catch (error) {
     console.error("REVIEW LAPORAN ERROR:", error);
     return res.status(500).json({
-      message: "Gagal menyimpan penilaian laporan",
+      message: "Gagal menyimpan status laporan",
       error: error.message,
     });
   }

@@ -23,6 +23,77 @@ async function getLamaranMilikPerusahaan(lamaranId, perusahaanId) {
   return lamaran;
 }
 
+/* ── Helper: kirim notifikasi (silent-fail, tidak boleh gagalkan request utama) ── */
+async function kirimNotifikasi(userId, lamaranId, judul, pesan) {
+  try {
+    await prisma.notifikasi.create({
+      data: { userId, lamaranId, judul, pesan, dibaca: false },
+    });
+  } catch (e) {
+    console.error("NOTIF ERROR:", e.message);
+  }
+}
+
+/* ── Helper: sinkronkan status Pengajuan Dosen Pembimbing saat Magang
+   diubah menjadi "Selesai". Hanya berlaku kalau bimbingan sedang
+   BIMBINGAN_AKTIF — kalau belum ada pengajuan, atau pengajuan belum aktif
+   (masih menunggu persetujuan / ditolak), tidak disentuh sama sekali.
+   Tidak butuh field/kolom baru: status "SELESAI" sudah ada di enum
+   StatusPengajuanDosen pada schema.prisma. ─────────────────────────────── */
+async function selesaikanBimbinganJikaAda(lamaranId, actor) {
+  try {
+    const pengajuan = await prisma.pengajuanDosenPembimbing.findUnique({
+      where: { lamaranId: Number(lamaranId) },
+      include: {
+        mahasiswa: { include: { user: true } },
+        dosenDitetapkan: { include: { user: true } },
+        lamaran: { include: { lowongan: { include: { perusahaan: true } } } },
+      },
+    });
+
+    if (!pengajuan || pengajuan.status !== "BIMBINGAN_AKTIF") return;
+
+    const namaPerusahaan = pengajuan.lamaran?.lowongan?.perusahaan?.nama || "Perusahaan";
+    const namaDosen = pengajuan.dosenDitetapkan?.user?.name || "dosen pembimbing";
+    const namaMahasiswa = pengajuan.mahasiswa?.user?.name || pengajuan.mahasiswa?.name || "Mahasiswa";
+
+    await prisma.pengajuanDosenPembimbing.update({
+      where: { id: pengajuan.id },
+      data: { status: "SELESAI" },
+    });
+
+    await prisma.riwayatStatusPengajuan.create({
+      data: {
+        pengajuanId: pengajuan.id,
+        status: "SELESAI",
+        keterangan: `Magang telah ditandai Selesai oleh ${namaPerusahaan}, bimbingan otomatis diselesaikan`,
+        changedById: actor?.id || null,
+        changedByRole: actor?.role || "perusahaan",
+      },
+    });
+
+    await kirimNotifikasi(
+      pengajuan.mahasiswa.userId,
+      pengajuan.lamaranId,
+      "Bimbingan Magang Selesai",
+      `Magang Anda di ${namaPerusahaan} telah ditandai selesai. Bimbingan dengan ${namaDosen} juga otomatis diselesaikan.`
+    );
+
+    if (pengajuan.dosenDitetapkan) {
+      await kirimNotifikasi(
+        pengajuan.dosenDitetapkan.userId,
+        pengajuan.lamaranId,
+        "Bimbingan Magang Selesai",
+        `Magang ${namaMahasiswa} di ${namaPerusahaan} telah ditandai selesai oleh perusahaan. Bimbingan Anda dengan mahasiswa ini otomatis diselesaikan.`
+      );
+    }
+  } catch (e) {
+    // Kegagalan sinkronisasi TIDAK boleh menggagalkan update status magang itu sendiri —
+    // cukup dicatat di log server untuk ditindaklanjuti manual kalau perlu.
+    console.error("SYNC PENGAJUAN DOSEN -> SELESAI ERROR:", e.message);
+  }
+}
+
 /* ── Helper: mapping 1 baris lamaran+magang jadi bentuk yang dipakai FE ───── */
 /*    NOTE: field "logbook" sudah dihapus dari sini. Data laporanMagang di    */
 /*    database TIDAK dihapus/diubah — cuma tidak lagi diquery/ditampilkan     */
@@ -180,6 +251,13 @@ exports.updateStatusMagang = async (req, res) => {
       },
     });
 
+    // ── Sinkronisasi: kalau status magang jadi "Selesai", ikut selesaikan
+    //    bimbingan dosen (PengajuanDosenPembimbing) yang sedang aktif untuk
+    //    lamaran ini. Tidak berlaku untuk status lain (Aktif/Cuti/Dropout).
+    if (status === "Selesai") {
+      await selesaikanBimbinganJikaAda(lamaran.id, req.user);
+    }
+
     try {
       await createAuditLog({
         req,
@@ -194,6 +272,7 @@ exports.updateStatusMagang = async (req, res) => {
     }
 
     res.json({ message: "Status magang berhasil diperbarui", data: updated });
+
   } catch (error) {
     res.status(500).json({ message: "Gagal memperbarui status magang", error: error.message });
   }
